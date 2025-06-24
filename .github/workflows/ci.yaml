@@ -1,0 +1,101 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
+
+    - name: Setup cubefs cluster
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y maven
+        
+        git clone --depth=1 https://github.com/cubefs/cubefs.git && cd cubefs
+        docker/run_docker.sh --build
+        docker/run_docker.sh --monitor
+        docker/run_docker.sh --server
+
+    - name: Create kind cluster
+      run: |
+        curl -Lo ./kubectl https://dl.k8s.io/release/v1.33.2/bin/linux/amd64/kubectl
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+        kind create cluster --name cubefs-csi-test --image kindest/node:v1.33.1
+        docker network connect docker_extnetwork cubefs-csi-test-control-plane
+
+    - name: Install csi driver
+      run: |
+        git clone --depth=1 https://github.com/cubefs/cubefs-csi.git && cd cubefs-csi
+        
+        kubectl label node cubefs-csi-test-control-plane component.cubefs.io/csi=enabled
+        kubectl apply -f deploy/csi-rbac.yaml
+        kubectl apply -f deploy/csi-controller-deployment.yaml
+        kubectl apply -f deploy/csi-node-daemonset.yaml
+
+
+  
+    - name: Prepare testdriver config
+      run: |
+        cat <<EOF > /tmp/cubefs-testsc.yaml
+        kind: StorageClass
+        apiVersion: storage.k8s.io/v1
+        metadata:
+          name: cfs-sc
+        provisioner: csi.cubefs.com
+        allowVolumeExpansion: true
+        reclaimPolicy: Delete
+        parameters:
+          masterAddr: "192.168.0.11:17010"
+          consulAddr: "http://192.168.0.101:8500"
+          # Owner name as authentication
+          owner: "csiuser"
+        EOF
+
+        cat <<EOF > /tmp/cubefs-testdriver.yaml
+        StorageClass:
+          FromFile: /tmp/cubefs-testsc.yaml
+        DriverInfo:
+          Name: csi.cubefs.com
+          SupportedSizeRange:
+            Min: 1Gi
+          Capabilities:
+            controllerExpansion: true
+            exec: false
+            multipods: true
+            nodeExpansion: true
+            persistence: true
+            singleNodeVolume: true
+            FSResizeFromSourceNotSupported: true
+        EOF
+
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
+
+    # - name: Run Kubernetes E2E Tests
+    #   run: |
+    #     curl -LO https://dl.k8s.io/release/v1.33.1/kubernetes-test-linux-amd64.tar.gz
+    #     tar -zxvf kubernetes-test-linux-amd64.tar.gz
+    #     chmod +x kubernetes/test/bin/*
+    #     sudo cp kubernetes/test/bin/* /usr/local/bin/
+
+    #     e2e.test \
+    #     -storage.testdriver=/tmp/cubefs-testdriver.yaml \
+    #     -kubeconfig=/home/runner/.kube/config \
+    #     --ginkgo.focus='External.Storage' \
+    #     --ginkgo.skip='\[Feature:|\[Disruptive\]'
+
+
+
