@@ -39,13 +39,21 @@ jobs:
     - name: Install csi driver
       run: |
         git clone --depth=1 https://github.com/cubefs/cubefs-csi.git && cd cubefs-csi
-        
+
+        # build latest image and load it into kind
+        bash build/build_cfs_client.sh main
+        bash build/build_cfs_csi_driver.sh
+        docker build -t cubefs/cfs-csi-driver ./build
+        kind load docker-image --name cubefs-csi-test-control-plane cubefs/cfs-csi-driver
+
+        # replace image
+        yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-controller-deployment.yaml
+        yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-node-daemonset.yaml
+
         kubectl label node cubefs-csi-test-control-plane component.cubefs.io/csi=enabled
         kubectl apply -f deploy/csi-rbac.yaml
         kubectl apply -f deploy/csi-controller-deployment.yaml
         kubectl apply -f deploy/csi-node-daemonset.yaml
-
-
   
     - name: Prepare testdriver config
       run: |
