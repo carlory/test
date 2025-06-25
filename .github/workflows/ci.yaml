@@ -41,14 +41,22 @@ jobs:
         git clone --depth=1 https://github.com/cubefs/cubefs-csi.git && cd cubefs-csi
 
         # build latest image and load it into kind
-        bash build/build_cfs_client.sh main
-        bash build/build_cfs_csi_driver.sh
-        docker build -t cubefs/cfs-csi-driver ./build
-        kind load docker-image --name cubefs-csi-test-control-plane cubefs/cfs-csi-driver
+        # mkdir -p bin && cp ../cubefs/build/bin/cfs-client bin
+        
+        # commitID=$(git rev-parse --short=8 HEAD)
+        # branch=$(git symbolic-ref --short -q HEAD)
+        # buildTime=$(date +%Y-%m-%dT%H:%M)
+
+        # CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+        #  -ldflags="-s -w -X main.CommitID=${commitID} -X main.BuildTime=${buildTime} -X main.Branch=${branch} " \
+        #  -o bin/cfs-csi-driver ./cmd
+
+        # docker build -t cubefs/cfs-csi-driver ./build
+        # kind load docker-image --name cubefs-csi-test-control-plane cubefs/cfs-csi-driver
 
         # replace image
-        yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-controller-deployment.yaml
-        yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-node-daemonset.yaml
+        # yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-controller-deployment.yaml
+        # yq eval '.spec.template.spec.containers[] | select(.name == "cfs-driver") | .image = "cubefs/cfs-csi-driver"' -i deploy/csi-node-daemonset.yaml
 
         kubectl label node cubefs-csi-test-control-plane component.cubefs.io/csi=enabled
         kubectl apply -f deploy/csi-rbac.yaml
@@ -81,7 +89,7 @@ jobs:
             Min: 1Gi
           Capabilities:
             controllerExpansion: true
-            exec: false
+            exec: true
             multipods: true
             nodeExpansion: true
             persistence: true
@@ -92,18 +100,18 @@ jobs:
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
 
-    # - name: Run Kubernetes E2E Tests
-    #   run: |
-    #     curl -LO https://dl.k8s.io/release/v1.33.1/kubernetes-test-linux-amd64.tar.gz
-    #     tar -zxvf kubernetes-test-linux-amd64.tar.gz
-    #     chmod +x kubernetes/test/bin/*
-    #     sudo cp kubernetes/test/bin/* /usr/local/bin/
+    - name: Run Kubernetes E2E Tests
+      run: |
+        curl -LO https://dl.k8s.io/release/v1.33.1/kubernetes-test-linux-amd64.tar.gz
+        tar -zxvf kubernetes-test-linux-amd64.tar.gz
+        chmod +x kubernetes/test/bin/*
+        sudo cp kubernetes/test/bin/* /usr/local/bin/
 
-    #     e2e.test \
-    #     -storage.testdriver=/tmp/cubefs-testdriver.yaml \
-    #     -kubeconfig=/home/runner/.kube/config \
-    #     --ginkgo.focus='External.Storage' \
-    #     --ginkgo.skip='\[Feature:|\[Disruptive\]'
+        e2e.test \
+        -storage.testdriver=/tmp/cubefs-testdriver.yaml \
+        -kubeconfig=/home/runner/.kube/config \
+        --ginkgo.focus='External.Storage' \
+        --ginkgo.skip='\[Feature:|\[Disruptive\]'
 
 
 
