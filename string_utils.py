@@ -1,5 +1,7 @@
 """Small string utilities for the test repo."""
 
+__all__ = ["slugify", "title_case"]
+
 
 def slugify(text: str, separator: str = "-") -> str:
     """Make a URL-friendly slug from ``text``.

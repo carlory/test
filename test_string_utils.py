@@ -12,6 +12,9 @@ class TestSlugify(unittest.TestCase):
     def test_collapses_whitespace(self):
         self.assertEqual(slugify("  Multiple   Spaces  "), "multiple-spaces")
 
+    def test_mixed_whitespace(self):
+        self.assertEqual(slugify("tab\there\r\nand newline"), "tab-here-and-newline")
+
     def test_custom_separator(self):
         self.assertEqual(slugify("a b c", separator="_"), "a_b_c")
 
